@@ -30,7 +30,6 @@ dist-ssr
 
 # Agent artifacts
 .agent
-C:\Users\giost\.gemini
 
 # Testing
 coverage
