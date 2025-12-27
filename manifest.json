@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "PulseSynth",
+  "version": "0.1.0",
+  "description": "Audio-reactive ambient glow for your browser",
+  "permissions": ["tabCapture", "offscreen"],
+  "background": {
+    "service_worker": "src/background.ts",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "PulseSynth"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
