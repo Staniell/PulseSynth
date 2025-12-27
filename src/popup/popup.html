@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PulseSynth</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        width: 280px;
+        padding: 16px;
+        font-family: "Segoe UI", system-ui, sans-serif;
+        background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 100%);
+        color: #fff;
+      }
+
+      .header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 16px;
+      }
+
+      .header h1 {
+        font-size: 18px;
+        font-weight: 600;
+        background: linear-gradient(90deg, #00d4ff, #ff00ff);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+        margin-bottom: 16px;
+        font-size: 13px;
+      }
+
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #666;
+        transition: background 0.3s ease;
+      }
+
+      .status-dot.active {
+        background: #00ff88;
+        box-shadow: 0 0 8px #00ff88;
+      }
+
+      .status-text {
+        color: #888;
+      }
+
+      .status-text.active {
+        color: #00ff88;
+      }
+
+      .btn {
+        width: 100%;
+        padding: 12px 16px;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .btn-primary {
+        background: linear-gradient(135deg, #00d4ff 0%, #0066ff 100%);
+        color: #fff;
+      }
+
+      .btn-primary:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 212, 255, 0.3);
+      }
+
+      .btn-primary:active {
+        transform: translateY(0);
+      }
+
+      .btn-stop {
+        background: linear-gradient(135deg, #ff4444 0%, #cc0000 100%);
+      }
+
+      .btn-stop:hover {
+        box-shadow: 0 4px 12px rgba(255, 68, 68, 0.3);
+      }
+
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none !important;
+      }
+
+      .info {
+        margin-top: 12px;
+        font-size: 11px;
+        color: #666;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>PulseSynth</h1>
+    </div>
+
+    <div class="status">
+      <div class="status-dot" id="statusDot"></div>
+      <span class="status-text" id="statusText">Inactive</span>
+    </div>
+
+    <button class="btn btn-primary" id="toggleBtn">Start PulseSynth</button>
+
+    <p class="info">Click to capture audio from the current tab</p>
+
+    <script type="module" src="../popup.js"></script>
+  </body>
+</html>
