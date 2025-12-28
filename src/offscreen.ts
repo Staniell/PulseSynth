@@ -6,6 +6,87 @@ let mediaStream: MediaStream | null = null;
 let analyserNode: AnalyserNode | null = null;
 let sourceNode: MediaStreamAudioSourceNode | null = null;
 
+// Reusable typed array (per performance rules - no per-frame allocations)
+let frequencyData: Uint8Array | null = null;
+
+// Smoothed audio band values (EMA)
+let smoothedBass = 0;
+let smoothedMids = 0;
+let smoothedHighs = 0;
+let smoothedEnergy = 0;
+
+// EMA smoothing factor (0.3 = responsive but stable)
+const SMOOTHING_ALPHA = 0.3;
+
+// FFT bin ranges for 256 FFT size @ 44.1kHz sample rate
+// Each bin = sampleRate / fftSize = 44100 / 256 ≈ 172 Hz per bin
+// Bass: 0-250 Hz → bins 0-1
+// Mids: 250-4000 Hz → bins 2-23
+// Highs: 4000-20000 Hz → bins 24-127
+const BASS_END_BIN = 2; // ~344 Hz
+const MIDS_END_BIN = 24; // ~4128 Hz
+
+// Audio band data structure
+interface AudioBands {
+  bass: number;
+  mids: number;
+  highs: number;
+  energy: number;
+}
+
+// Calculate average of a range in the frequency array
+function getAverageInRange(data: Uint8Array, start: number, end: number): number {
+  let sum = 0;
+  const count = end - start;
+  for (let i = start; i < end; i++) {
+    sum += data[i];
+  }
+  return count > 0 ? sum / count / 255 : 0; // Normalize to 0-1
+}
+
+// Apply EMA smoothing
+function smooth(current: number, previous: number): number {
+  return SMOOTHING_ALPHA * current + (1 - SMOOTHING_ALPHA) * previous;
+}
+
+// Analyze audio and return band values
+function analyzeAudio(): AudioBands {
+  if (!analyserNode || !frequencyData) {
+    return { bass: 0, mids: 0, highs: 0, energy: 0 };
+  }
+
+  // Get frequency data
+  const data = frequencyData;
+  analyserNode.getByteFrequencyData(data as Uint8Array<ArrayBuffer>);
+
+  const binCount = data.length;
+
+  // Calculate raw band values
+  const rawBass = getAverageInRange(data, 0, BASS_END_BIN);
+  const rawMids = getAverageInRange(data, BASS_END_BIN, MIDS_END_BIN);
+  const rawHighs = getAverageInRange(data, MIDS_END_BIN, binCount);
+
+  // Calculate overall energy (RMS-like)
+  let totalEnergy = 0;
+  for (let i = 0; i < binCount; i++) {
+    totalEnergy += data[i];
+  }
+  const rawEnergy = totalEnergy / binCount / 255;
+
+  // Apply smoothing
+  smoothedBass = smooth(rawBass, smoothedBass);
+  smoothedMids = smooth(rawMids, smoothedMids);
+  smoothedHighs = smooth(rawHighs, smoothedHighs);
+  smoothedEnergy = smooth(rawEnergy, smoothedEnergy);
+
+  return {
+    bass: smoothedBass,
+    mids: smoothedMids,
+    highs: smoothedHighs,
+    energy: smoothedEnergy,
+  };
+}
+
 // Start audio stream processing
 async function startAudioStream(streamId: string): Promise<{ success: boolean; error?: string }> {
   try {
@@ -25,11 +106,15 @@ async function startAudioStream(streamId: string): Promise<{ success: boolean; e
     // Create audio context
     audioContext = new AudioContext();
     console.log("[PulseSynth:Offscreen] AudioContext state:", audioContext.state);
+    console.log("[PulseSynth:Offscreen] Sample rate:", audioContext.sampleRate);
 
     // Create analyser node
     analyserNode = audioContext.createAnalyser();
     analyserNode.fftSize = 256; // Per rules: 256-512
     analyserNode.smoothingTimeConstant = 0.8;
+
+    // Initialize reusable frequency data array
+    frequencyData = new Uint8Array(analyserNode.frequencyBinCount);
 
     // Create source from stream
     sourceNode = audioContext.createMediaStreamSource(mediaStream);
@@ -45,7 +130,7 @@ async function startAudioStream(streamId: string): Promise<{ success: boolean; e
     console.log("[PulseSynth:Offscreen] FFT size:", analyserNode.fftSize);
     console.log("[PulseSynth:Offscreen] Frequency bin count:", analyserNode.frequencyBinCount);
 
-    // Start a simple logging loop to verify audio is flowing
+    // Start the audio analysis loop
     startAudioMonitor();
 
     return { success: true };
@@ -73,16 +158,22 @@ function stopAudioStream() {
     audioContext.close();
     audioContext = null;
   }
+  frequencyData = null;
+
+  // Reset smoothed values
+  smoothedBass = 0;
+  smoothedMids = 0;
+  smoothedHighs = 0;
+  smoothedEnergy = 0;
+
   console.log("[PulseSynth:Offscreen] Audio stream stopped and cleaned up.");
 }
 
-// Simple audio monitor for verification (Phase 2 only)
+// Audio monitor for verification
 let monitorInterval: number | null = null;
 
 function startAudioMonitor() {
   if (monitorInterval) return;
-
-  const dataArray = new Uint8Array(analyserNode!.frequencyBinCount);
 
   monitorInterval = window.setInterval(() => {
     if (!analyserNode) {
@@ -90,18 +181,15 @@ function startAudioMonitor() {
       return;
     }
 
-    analyserNode.getByteFrequencyData(dataArray);
+    const bands = analyzeAudio();
 
-    // Calculate simple average
-    let sum = 0;
-    for (let i = 0; i < dataArray.length; i++) {
-      sum += dataArray[i];
-    }
-    const average = sum / dataArray.length;
-
-    // Log occasionally to verify audio is flowing
-    console.log("[PulseSynth:Offscreen] Audio level:", average.toFixed(2));
-  }, 1000); // Log every second for Phase 2 verification
+    // Log band values for Phase 3 verification
+    console.log(
+      `[PulseSynth:Offscreen] Bass: ${bands.bass.toFixed(3)} | Mids: ${bands.mids.toFixed(
+        3
+      )} | Highs: ${bands.highs.toFixed(3)} | Energy: ${bands.energy.toFixed(3)}`
+    );
+  }, 1000); // Log every second for Phase 3 verification
 }
 
 function stopAudioMonitor() {
