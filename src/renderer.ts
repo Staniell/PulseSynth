@@ -17,10 +17,48 @@ let audioData = {
   energy: 0,
 };
 
+// Preset type definition
+export type PresetName = "ambient" | "punchy" | "chill";
+
+// Preset parameters
+interface PresetParams {
+  bassGain: number; // Bass intensity multiplier
+  bassReach: number; // How far bass pushes glow inward
+  hueSpeed: number; // Speed of hue rotation
+  shimmerAmp: number; // Shimmer intensity
+  shimmerSpeed: number; // Shimmer animation speed
+}
+
+// Preset definitions
+export const PRESETS: Record<PresetName, PresetParams> = {
+  ambient: {
+    bassGain: 0.3,
+    bassReach: 0.15,
+    hueSpeed: 0.02,
+    shimmerAmp: 0.1,
+    shimmerSpeed: 2.0,
+  },
+  punchy: {
+    bassGain: 0.6,
+    bassReach: 0.35,
+    hueSpeed: 0.04,
+    shimmerAmp: 0.3,
+    shimmerSpeed: 5.0,
+  },
+  chill: {
+    bassGain: 0.2,
+    bassReach: 0.1,
+    hueSpeed: 0.01,
+    shimmerAmp: 0.05,
+    shimmerSpeed: 1.0,
+  },
+};
+
 // Settings from popup
 let settings = {
   intensity: 100,
   glowWidth: 100,
+  preset: "ambient" as PresetName,
 };
 
 // Vertex shader - simple fullscreen quad
@@ -32,7 +70,7 @@ const vertexShader = `
   }
 `;
 
-// Fragment shader - audio-reactive edge glow
+// Fragment shader - audio-reactive edge glow with preset support
 const fragmentShader = `
   varying vec2 vUv;
   uniform float uTime;
@@ -43,6 +81,18 @@ const fragmentShader = `
   uniform float uIntensity;
   uniform float uGlowWidth;
   uniform vec2 uResolution;
+  
+  // Preset uniforms
+  uniform float uBassGain;
+  uniform float uBassReach;
+  uniform float uHueSpeed;
+  uniform float uShimmerAmp;
+  uniform float uShimmerSpeed;
+
+  // Pseudo-random for shimmer
+  float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+  }
 
   // HSV to RGB conversion
   vec3 hsv2rgb(vec3 c) {
@@ -63,18 +113,27 @@ const fragmentShader = `
     float baseGlowWidth = 0.1 * uGlowWidth;
     float glowWidth = baseGlowWidth + uEnergy * 0.15 * uGlowWidth;
     
-    // Create smooth edge falloff with bass pulse
-    float bassPulse = 1.0 + uBass * 0.3;
-    float glow = 1.0 - smoothstep(0.0, glowWidth * bassPulse, edgeDist);
+    // Bass-driven inward reach (controlled by preset)
+    float bassEffect = uBass * uBassGain;
+    float bassReach = bassEffect * uBassReach;
+    float bassPulse = 1.0 + bassEffect;
+    float glow = 1.0 - smoothstep(0.0, (glowWidth + bassReach) * bassPulse, edgeDist);
     
-    // Audio-reactive color
+    // Audio-reactive color with preset-controlled hue speed
     float hue = 0.75 - uBass * 0.25 + uHighs * 0.15;
-    hue = mod(hue + uTime * 0.02, 1.0);
+    hue = mod(hue + uTime * uHueSpeed, 1.0);
     
     float saturation = 0.7 + uMids * 0.3;
     float brightness = 0.8 + uEnergy * 0.2;
     
     vec3 glowColor = hsv2rgb(vec3(hue, saturation, brightness));
+    
+    // Shimmer effect (controlled by preset)
+    vec2 shimmerCoord = uv * 15.0 + uTime * uShimmerSpeed;
+    float shimmer = hash(floor(shimmerCoord));
+    shimmer = (shimmer - 0.5) * uHighs * uShimmerAmp;
+    float flicker = sin(uTime * (5.0 + uHighs * 10.0)) * 0.5 + 0.5;
+    shimmer *= flicker * glow; // Only shimmer in glow areas
     
     // Breathing animation
     float breathe = sin(uTime * 2.0) * 0.1 + 0.9;
@@ -82,12 +141,14 @@ const fragmentShader = `
     // Intensity based on energy and user setting
     float intensity = (0.4 + uEnergy * 0.4) * uIntensity;
     
-    // Final alpha
-    float alpha = glow * intensity * breathe;
+    // Final alpha with shimmer
+    float alpha = glow * intensity * breathe + shimmer * uIntensity;
     
-    // Inner glow on bass hits
-    float innerGlow = smoothstep(0.3, 0.0, edgeDist) * uBass * 0.15 * uIntensity;
+    // Inner glow on bass hits (scaled by preset bass gain)
+    float innerGlow = smoothstep(0.3, 0.0, edgeDist) * bassEffect * 0.2 * uIntensity;
     alpha += innerGlow;
+    
+    alpha = clamp(alpha, 0.0, 0.9);
     
     gl_FragColor = vec4(glowColor, alpha);
   }
@@ -147,6 +208,12 @@ export function initRenderer(): HTMLCanvasElement | null {
         uIntensity: { value: 1.0 },
         uGlowWidth: { value: 1.0 },
         uResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+        // Preset uniforms (default: ambient)
+        uBassGain: { value: PRESETS.ambient.bassGain },
+        uBassReach: { value: PRESETS.ambient.bassReach },
+        uHueSpeed: { value: PRESETS.ambient.hueSpeed },
+        uShimmerAmp: { value: PRESETS.ambient.shimmerAmp },
+        uShimmerSpeed: { value: PRESETS.ambient.shimmerSpeed },
       },
       transparent: true,
       depthTest: false,
@@ -214,11 +281,27 @@ export function updateAudioData(data: { bass: number; mids: number; highs: numbe
   audioData = data;
 }
 
-export function updateSettings(newSettings: { intensity: number; glowWidth: number }) {
-  settings = newSettings;
+// Apply a preset to the shader
+export function setPreset(presetName: PresetName) {
+  const preset = PRESETS[presetName];
+
+  if (material) {
+    material.uniforms.uBassGain.value = preset.bassGain;
+    material.uniforms.uBassReach.value = preset.bassReach;
+    material.uniforms.uHueSpeed.value = preset.hueSpeed;
+    material.uniforms.uShimmerAmp.value = preset.shimmerAmp;
+    material.uniforms.uShimmerSpeed.value = preset.shimmerSpeed;
+  }
+}
+
+export function updateSettings(newSettings: { intensity: number; glowWidth: number; preset?: PresetName }) {
+  settings = { ...settings, ...newSettings };
   if (material) {
     material.uniforms.uIntensity.value = settings.intensity / 100;
     material.uniforms.uGlowWidth.value = settings.glowWidth / 100;
+  }
+  if (newSettings.preset) {
+    setPreset(newSettings.preset);
   }
 }
 

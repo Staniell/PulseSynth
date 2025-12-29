@@ -8,20 +8,26 @@ const intensityValue = document.getElementById("intensityValue") as HTMLSpanElem
 const glowWidthSlider = document.getElementById("glowWidthSlider") as HTMLInputElement;
 const glowWidthValue = document.getElementById("glowWidthValue") as HTMLSpanElement;
 const tabSelect = document.getElementById("tabSelect") as HTMLSelectElement;
+const presetSelect = document.getElementById("presetSelect") as HTMLSelectElement;
 
 let isActive = false;
 let selectedTabId: number | null = null;
+
+// Preset type
+type PresetName = "ambient" | "punchy" | "chill";
 
 // Settings interface
 interface Settings {
   intensity: number;
   glowWidth: number;
+  preset: PresetName;
 }
 
 // Default settings
 const defaultSettings: Settings = {
   intensity: 100,
   glowWidth: 100,
+  preset: "ambient",
 };
 
 // Load settings from storage
@@ -126,6 +132,7 @@ async function init() {
   intensityValue.textContent = `${settings.intensity}%`;
   glowWidthSlider.value = String(settings.glowWidth);
   glowWidthValue.textContent = `${settings.glowWidth}%`;
+  presetSelect.value = settings.preset;
 
   // Populate tab list
   await populateTabs();
@@ -156,6 +163,16 @@ glowWidthSlider.addEventListener("input", async () => {
 
   const settings = await loadSettings();
   settings.glowWidth = value;
+  await saveSettings(settings);
+  broadcastSettings(settings);
+});
+
+// Preset selector handler
+presetSelect.addEventListener("change", async () => {
+  const value = presetSelect.value as PresetName;
+
+  const settings = await loadSettings();
+  settings.preset = value;
   await saveSettings(settings);
   broadcastSettings(settings);
 });
