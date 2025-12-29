@@ -6,6 +6,34 @@ const OFFSCREEN_DOCUMENT_PATH = "offscreen.html";
 // State
 let isCapturing = false;
 let capturedTabId: number | null = null;
+const injectedTabs = new Set<number>();
+
+// Ensure content script is injected in a tab
+async function ensureContentScriptInjected(tabId: number): Promise<boolean> {
+  if (injectedTabs.has(tabId)) {
+    return true;
+  }
+
+  try {
+    // Try to ping the content script first
+    await chrome.tabs.sendMessage(tabId, { type: "PING" });
+    injectedTabs.add(tabId);
+    return true;
+  } catch {
+    // Content script not loaded, inject it
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ["content.js"],
+      });
+      injectedTabs.add(tabId);
+      return true;
+    } catch {
+      // Injection failed (e.g., chrome:// pages)
+      return false;
+    }
+  }
+}
 
 // Create offscreen document if it doesn't exist
 async function setupOffscreenDocument() {
@@ -134,17 +162,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     case "AUDIO_DATA":
       // Broadcast audio data to ALL tabs for cross-tab visual persistence
       if (isCapturing) {
-        chrome.tabs.query({}, (tabs) => {
+        chrome.tabs.query({}, async (tabs) => {
           for (const tab of tabs) {
             if (tab.id && tab.url && !tab.url.startsWith("chrome://")) {
-              chrome.tabs
-                .sendMessage(tab.id, {
-                  type: "AUDIO_DATA",
-                  data: message.data,
-                })
-                .catch(() => {
-                  // Tab may not have content script loaded
-                });
+              // Ensure content script is injected
+              const injected = await ensureContentScriptInjected(tab.id);
+              if (injected) {
+                chrome.tabs
+                  .sendMessage(tab.id, {
+                    type: "AUDIO_DATA",
+                    data: message.data,
+                  })
+                  .catch(() => {});
+              }
             }
           }
         });
