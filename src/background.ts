@@ -106,20 +106,22 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       return false;
 
     case "AUDIO_DATA":
-      // Route audio data to the captured tab's content script
-      console.log("[PulseSynth] Received AUDIO_DATA, isCapturing:", isCapturing, "capturedTabId:", capturedTabId);
-      if (isCapturing && capturedTabId) {
-        chrome.tabs
-          .sendMessage(capturedTabId, {
-            type: "AUDIO_DATA",
-            data: message.data,
-          })
-          .then(() => {
-            // Message sent successfully
-          })
-          .catch((err) => {
-            console.error("[PulseSynth] Failed to send to content script:", err);
-          });
+      // Broadcast audio data to ALL tabs for cross-tab visual persistence
+      if (isCapturing) {
+        chrome.tabs.query({}, (tabs) => {
+          for (const tab of tabs) {
+            if (tab.id && tab.url && !tab.url.startsWith("chrome://")) {
+              chrome.tabs
+                .sendMessage(tab.id, {
+                  type: "AUDIO_DATA",
+                  data: message.data,
+                })
+                .catch(() => {
+                  // Tab may not have content script loaded
+                });
+            }
+          }
+        });
       }
       return false;
 
