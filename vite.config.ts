@@ -49,6 +49,7 @@ export default defineConfig({
         background: resolve(__dirname, "src/background.ts"),
         offscreen: resolve(__dirname, "src/offscreen.ts"),
         popup: resolve(__dirname, "src/popup/popup.ts"),
+        content: resolve(__dirname, "src/content.ts"),
       },
       output: {
         entryFileNames: "[name].js",

@@ -130,8 +130,8 @@ async function startAudioStream(streamId: string): Promise<{ success: boolean; e
     console.log("[PulseSynth:Offscreen] FFT size:", analyserNode.fftSize);
     console.log("[PulseSynth:Offscreen] Frequency bin count:", analyserNode.frequencyBinCount);
 
-    // Start the audio analysis loop
-    startAudioMonitor();
+    // Start the audio data streaming loop
+    startAudioDataStream();
 
     return { success: true };
   } catch (error) {
@@ -169,33 +169,43 @@ function stopAudioStream() {
   console.log("[PulseSynth:Offscreen] Audio stream stopped and cleaned up.");
 }
 
-// Audio monitor for verification
-let monitorInterval: number | null = null;
+// Audio data streaming using setInterval (requestAnimationFrame doesn't work in offscreen docs)
+let streamingInterval: number | null = null;
+const STREAM_INTERVAL_MS = 16; // ~60fps
 
-function startAudioMonitor() {
-  if (monitorInterval) return;
+function startAudioDataStream() {
+  if (streamingInterval) return;
 
-  monitorInterval = window.setInterval(() => {
+  console.log("[PulseSynth:Offscreen] Starting audio data stream via setInterval.");
+
+  streamingInterval = window.setInterval(() => {
     if (!analyserNode) {
-      stopAudioMonitor();
+      stopAudioDataStream();
       return;
     }
 
     const bands = analyzeAudio();
 
-    // Log band values for Phase 3 verification
-    console.log(
-      `[PulseSynth:Offscreen] Bass: ${bands.bass.toFixed(3)} | Mids: ${bands.mids.toFixed(
-        3
-      )} | Highs: ${bands.highs.toFixed(3)} | Energy: ${bands.energy.toFixed(3)}`
-    );
-  }, 1000); // Log every second for Phase 3 verification
+    // Send audio data to background
+    chrome.runtime
+      .sendMessage({
+        type: "AUDIO_DATA",
+        data: bands,
+      })
+      .then(() => {
+        // Sent successfully
+      })
+      .catch((err) => {
+        console.error("[PulseSynth:Offscreen] Failed to send AUDIO_DATA:", err);
+      });
+  }, STREAM_INTERVAL_MS);
 }
 
-function stopAudioMonitor() {
-  if (monitorInterval) {
-    clearInterval(monitorInterval);
-    monitorInterval = null;
+function stopAudioDataStream() {
+  if (streamingInterval) {
+    clearInterval(streamingInterval);
+    streamingInterval = null;
+    console.log("[PulseSynth:Offscreen] Stopped audio data stream.");
   }
 }
 
@@ -212,7 +222,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       return true; // Will respond asynchronously
 
     case "STOP_AUDIO_STREAM":
-      stopAudioMonitor();
+      stopAudioDataStream();
       stopAudioStream();
       sendResponse({ success: true });
       return false;

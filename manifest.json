@@ -3,7 +3,8 @@
   "name": "PulseSynth",
   "version": "0.1.0",
   "description": "Audio-reactive ambient glow for your browser",
-  "permissions": ["tabCapture", "offscreen", "activeTab"],
+  "permissions": ["tabCapture", "offscreen", "activeTab", "scripting"],
+  "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js",
     "type": "module"
@@ -12,6 +13,13 @@
     "default_title": "PulseSynth",
     "default_popup": "popup/popup.html"
   },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",

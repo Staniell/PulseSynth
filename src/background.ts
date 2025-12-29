@@ -105,6 +105,24 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       sendResponse({ isActive: isCapturing, tabId: capturedTabId });
       return false;
 
+    case "AUDIO_DATA":
+      // Route audio data to the captured tab's content script
+      console.log("[PulseSynth] Received AUDIO_DATA, isCapturing:", isCapturing, "capturedTabId:", capturedTabId);
+      if (isCapturing && capturedTabId) {
+        chrome.tabs
+          .sendMessage(capturedTabId, {
+            type: "AUDIO_DATA",
+            data: message.data,
+          })
+          .then(() => {
+            // Message sent successfully
+          })
+          .catch((err) => {
+            console.error("[PulseSynth] Failed to send to content script:", err);
+          });
+      }
+      return false;
+
     case "START_CAPTURE":
       // Prevent multiple simultaneous start attempts
       if (isCapturing) {
