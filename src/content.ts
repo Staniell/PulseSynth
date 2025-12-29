@@ -1,5 +1,7 @@
 // PulseSynth Content Script
-// Receives audio data from background and stores it for rendering
+// Receives audio data from background and manages WebGL overlay
+
+import { initRenderer, startRenderLoop, stopRenderLoop, updateAudioData, destroyRenderer } from "./renderer";
 
 // Audio band data structure
 interface AudioBands {
@@ -9,7 +11,7 @@ interface AudioBands {
   energy: number;
 }
 
-// Current audio data (will be used by renderer in Phase 5)
+// Current audio data
 let currentAudioData: AudioBands = {
   bass: 0,
   mids: 0,
@@ -17,25 +19,58 @@ let currentAudioData: AudioBands = {
   energy: 0,
 };
 
-// Expose to global scope for renderer (Phase 5)
-(window as { pulseSynthAudioData?: AudioBands }).pulseSynthAudioData = currentAudioData;
+// Renderer state
+let isRendererActive = false;
+let logThrottle = 0;
+
+// Initialize renderer when capture starts
+function startVisualizer() {
+  if (isRendererActive) return;
+
+  const canvas = initRenderer();
+  if (canvas) {
+    document.body.appendChild(canvas);
+    startRenderLoop();
+    isRendererActive = true;
+    console.log("[PulseSynth:Content] Visualizer started.");
+  }
+}
+
+// Stop renderer when capture stops
+function stopVisualizer() {
+  if (!isRendererActive) return;
+
+  stopRenderLoop();
+  destroyRenderer();
+  isRendererActive = false;
+  console.log("[PulseSynth:Content] Visualizer stopped.");
+}
 
 // Message listener
 chrome.runtime.onMessage.addListener((message, _sender, _sendResponse) => {
-  console.log("[PulseSynth:Content] Received message:", message.type);
-
   if (message.type === "AUDIO_DATA" && message.data) {
-    currentAudioData = message.data;
-    (window as { pulseSynthAudioData?: AudioBands }).pulseSynthAudioData = currentAudioData;
+    // Start visualizer on first audio data
+    if (!isRendererActive) {
+      startVisualizer();
+    }
 
-    // Phase 4 verification: log to console (throttled to reduce spam)
-    console.log(
-      `[PulseSynth:Content] Bass: ${currentAudioData.bass.toFixed(3)} | Mids: ${currentAudioData.mids.toFixed(
-        3
-      )} | Highs: ${currentAudioData.highs.toFixed(3)} | Energy: ${currentAudioData.energy.toFixed(3)}`
-    );
+    currentAudioData = message.data;
+    updateAudioData(currentAudioData);
+
+    // Throttled logging (every 60 frames = ~1 second)
+    logThrottle++;
+    if (logThrottle >= 60) {
+      logThrottle = 0;
+      console.log(
+        `[PulseSynth:Content] Bass: ${currentAudioData.bass.toFixed(3)} | Mids: ${currentAudioData.mids.toFixed(
+          3
+        )} | Highs: ${currentAudioData.highs.toFixed(3)}`
+      );
+    }
+  } else if (message.type === "STOP_VISUALIZER") {
+    stopVisualizer();
   }
   return false;
 });
 
-console.log("[PulseSynth:Content] Content script loaded and listener registered.");
+console.log("[PulseSynth:Content] Content script loaded.");
