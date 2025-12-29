@@ -56,7 +56,6 @@ function startVisualizer() {
     startRenderLoop();
     loadSettings(); // Apply saved settings
     isRendererActive = true;
-    console.log("[PulseSynth:Content] Visualizer started.");
   }
 }
 
@@ -67,7 +66,6 @@ function stopVisualizer() {
   stopRenderLoop();
   destroyRenderer();
   isRendererActive = false;
-  console.log("[PulseSynth:Content] Visualizer stopped.");
 }
 
 // Message listener
@@ -94,4 +92,4 @@ chrome.runtime.onMessage.addListener((message, _sender, _sendResponse) => {
   return false;
 });
 
-console.log("[PulseSynth:Content] Content script loaded.");
+// Loaded

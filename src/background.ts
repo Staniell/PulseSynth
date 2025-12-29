@@ -187,6 +187,22 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 });
 
+// Handle tab close - stop capture if source tab is closed
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (tabId === capturedTabId) {
+    console.log("[PulseSynth] Source tab closed, stopping capture.");
+    stopCapture();
+  }
+});
+
+// Handle tab navigation - stop capture if source tab navigates away
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (tabId === capturedTabId && changeInfo.url) {
+    console.log("[PulseSynth] Source tab navigated, stopping capture.");
+    stopCapture();
+  }
+});
+
 // Initialize on install
 chrome.runtime.onInstalled.addListener(async () => {
   console.log("[PulseSynth] Extension installed.");
