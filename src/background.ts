@@ -22,7 +22,7 @@ async function setupOffscreenDocument() {
   console.log("[PulseSynth] Offscreen document created.");
 }
 
-// Start capturing audio from the current tab
+// Start capturing audio from a tab
 async function startCapture(tabId: number): Promise<{ success: boolean; error?: string }> {
   // Check if already capturing
   if (isCapturing) {
@@ -33,6 +33,16 @@ async function startCapture(tabId: number): Promise<{ success: boolean; error?: 
   try {
     // Ensure offscreen document exists
     await setupOffscreenDocument();
+
+    // Focus the tab and its window (required for tabCapture)
+    const tab = await chrome.tabs.get(tabId);
+    if (tab.windowId) {
+      await chrome.windows.update(tab.windowId, { focused: true });
+    }
+    await chrome.tabs.update(tabId, { active: true });
+
+    // Small delay to ensure tab is focused
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     // Get media stream ID for the tab
     const streamId = await chrome.tabCapture.getMediaStreamId({
@@ -105,6 +115,22 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       sendResponse({ isActive: isCapturing, tabId: capturedTabId });
       return false;
 
+    case "UPDATE_SETTINGS":
+      // Broadcast settings to all tabs
+      chrome.tabs.query({}, (tabs) => {
+        for (const tab of tabs) {
+          if (tab.id && tab.url && !tab.url.startsWith("chrome://")) {
+            chrome.tabs
+              .sendMessage(tab.id, {
+                type: "UPDATE_SETTINGS",
+                settings: message.settings,
+              })
+              .catch(() => {});
+          }
+        }
+      });
+      return false;
+
     case "AUDIO_DATA":
       // Broadcast audio data to ALL tabs for cross-tab visual persistence
       if (isCapturing) {
@@ -129,20 +155,27 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       // Prevent multiple simultaneous start attempts
       if (isCapturing) {
         console.log("[PulseSynth] Already capturing, ignoring duplicate start request.");
-        sendResponse({ success: true }); // UI already shows active
+        sendResponse({ success: true, tabId: capturedTabId });
         return false;
       }
 
-      // Get the current active tab
-      chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
-        const tab = tabs[0];
-        if (!tab?.id) {
-          sendResponse({ success: false, error: "No active tab found" });
-          return;
-        }
-        const result = await startCapture(tab.id);
-        sendResponse(result);
-      });
+      // Use provided tabId or get current active tab
+      if (message.tabId) {
+        startCapture(message.tabId).then((result) => {
+          sendResponse({ ...result, tabId: message.tabId });
+        });
+      } else {
+        // Get the current active tab
+        chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+          const tab = tabs[0];
+          if (!tab?.id) {
+            sendResponse({ success: false, error: "No active tab found" });
+            return;
+          }
+          const result = await startCapture(tab.id);
+          sendResponse({ ...result, tabId: tab.id });
+        });
+      }
       return true; // Will respond asynchronously
 
     case "STOP_CAPTURE":

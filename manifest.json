@@ -3,7 +3,7 @@
   "name": "PulseSynth",
   "version": "0.1.0",
   "description": "Audio-reactive ambient glow for your browser",
-  "permissions": ["tabCapture", "offscreen", "activeTab", "scripting"],
+  "permissions": ["tabCapture", "offscreen", "activeTab", "scripting", "storage", "tabs"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js",

@@ -1,7 +1,14 @@
 // PulseSynth Content Script
 // Receives audio data from background and manages WebGL overlay
 
-import { initRenderer, startRenderLoop, stopRenderLoop, updateAudioData, destroyRenderer } from "./renderer";
+import {
+  initRenderer,
+  startRenderLoop,
+  stopRenderLoop,
+  updateAudioData,
+  updateSettings,
+  destroyRenderer,
+} from "./renderer";
 
 // Audio band data structure
 interface AudioBands {
@@ -9,6 +16,12 @@ interface AudioBands {
   mids: number;
   highs: number;
   energy: number;
+}
+
+// Settings interface
+interface Settings {
+  intensity: number;
+  glowWidth: number;
 }
 
 // Current audio data
@@ -23,6 +36,16 @@ let currentAudioData: AudioBands = {
 let isRendererActive = false;
 let logThrottle = 0;
 
+// Load settings from storage
+function loadSettings() {
+  chrome.storage.local.get(["pulseSynthSettings"], (result) => {
+    const settings = result.pulseSynthSettings as Settings | undefined;
+    if (settings) {
+      updateSettings(settings);
+    }
+  });
+}
+
 // Initialize renderer when capture starts
 function startVisualizer() {
   if (isRendererActive) return;
@@ -31,6 +54,7 @@ function startVisualizer() {
   if (canvas) {
     document.body.appendChild(canvas);
     startRenderLoop();
+    loadSettings(); // Apply saved settings
     isRendererActive = true;
     console.log("[PulseSynth:Content] Visualizer started.");
   }
@@ -61,12 +85,9 @@ chrome.runtime.onMessage.addListener((message, _sender, _sendResponse) => {
     logThrottle++;
     if (logThrottle >= 60) {
       logThrottle = 0;
-      console.log(
-        `[PulseSynth:Content] Bass: ${currentAudioData.bass.toFixed(3)} | Mids: ${currentAudioData.mids.toFixed(
-          3
-        )} | Highs: ${currentAudioData.highs.toFixed(3)}`
-      );
     }
+  } else if (message.type === "UPDATE_SETTINGS" && message.settings) {
+    updateSettings(message.settings);
   } else if (message.type === "STOP_VISUALIZER") {
     stopVisualizer();
   }

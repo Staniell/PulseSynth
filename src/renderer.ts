@@ -17,6 +17,12 @@ let audioData = {
   energy: 0,
 };
 
+// Settings from popup
+let settings = {
+  intensity: 100,
+  glowWidth: 100,
+};
+
 // Vertex shader - simple fullscreen quad
 const vertexShader = `
   varying vec2 vUv;
@@ -34,6 +40,8 @@ const fragmentShader = `
   uniform float uMids;
   uniform float uHighs;
   uniform float uEnergy;
+  uniform float uIntensity;
+  uniform float uGlowWidth;
   uniform vec2 uResolution;
 
   // HSV to RGB conversion
@@ -51,35 +59,34 @@ const fragmentShader = `
     float edgeDistY = min(uv.y, 1.0 - uv.y) * 2.0;
     float edgeDist = min(edgeDistX, edgeDistY);
     
-    // Dynamic glow width based on energy (0.1 to 0.25)
-    float baseGlowWidth = 0.1;
-    float glowWidth = baseGlowWidth + uEnergy * 0.15;
+    // Dynamic glow width based on energy and user setting
+    float baseGlowWidth = 0.1 * uGlowWidth;
+    float glowWidth = baseGlowWidth + uEnergy * 0.15 * uGlowWidth;
     
     // Create smooth edge falloff with bass pulse
-    float bassPulse = 1.0 + uBass * 0.3; // Bass makes glow wider
+    float bassPulse = 1.0 + uBass * 0.3;
     float glow = 1.0 - smoothstep(0.0, glowWidth * bassPulse, edgeDist);
     
     // Audio-reactive color
-    // Bass = warm (red/orange), Mids = neutral (purple), Highs = cool (cyan/blue)
-    float hue = 0.75 - uBass * 0.25 + uHighs * 0.15; // Shift hue based on audio
-    hue = mod(hue + uTime * 0.02, 1.0); // Slow rotation over time
+    float hue = 0.75 - uBass * 0.25 + uHighs * 0.15;
+    hue = mod(hue + uTime * 0.02, 1.0);
     
-    float saturation = 0.7 + uMids * 0.3; // More saturated with mids
-    float brightness = 0.8 + uEnergy * 0.2; // Brighter with energy
+    float saturation = 0.7 + uMids * 0.3;
+    float brightness = 0.8 + uEnergy * 0.2;
     
     vec3 glowColor = hsv2rgb(vec3(hue, saturation, brightness));
     
-    // Add subtle breathing animation
+    // Breathing animation
     float breathe = sin(uTime * 2.0) * 0.1 + 0.9;
     
-    // Intensity based on overall energy
-    float intensity = 0.4 + uEnergy * 0.4; // 40% to 80% intensity
+    // Intensity based on energy and user setting
+    float intensity = (0.4 + uEnergy * 0.4) * uIntensity;
     
-    // Final alpha with breathing and audio
+    // Final alpha
     float alpha = glow * intensity * breathe;
     
-    // Add slight inner glow on bass hits
-    float innerGlow = smoothstep(0.3, 0.0, edgeDist) * uBass * 0.15;
+    // Inner glow on bass hits
+    float innerGlow = smoothstep(0.3, 0.0, edgeDist) * uBass * 0.15 * uIntensity;
     alpha += innerGlow;
     
     gl_FragColor = vec4(glowColor, alpha);
@@ -137,6 +144,8 @@ export function initRenderer(): HTMLCanvasElement | null {
         uMids: { value: 0 },
         uHighs: { value: 0 },
         uEnergy: { value: 0 },
+        uIntensity: { value: 1.0 },
+        uGlowWidth: { value: 1.0 },
         uResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
       },
       transparent: true,
@@ -203,6 +212,14 @@ export function stopRenderLoop() {
 
 export function updateAudioData(data: { bass: number; mids: number; highs: number; energy: number }) {
   audioData = data;
+}
+
+export function updateSettings(newSettings: { intensity: number; glowWidth: number }) {
+  settings = newSettings;
+  if (material) {
+    material.uniforms.uIntensity.value = settings.intensity / 100;
+    material.uniforms.uGlowWidth.value = settings.glowWidth / 100;
+  }
 }
 
 export function destroyRenderer() {
