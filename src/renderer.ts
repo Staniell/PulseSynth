@@ -26,7 +26,7 @@ const vertexShader = `
   }
 `;
 
-// Fragment shader - edge glow effect
+// Fragment shader - audio-reactive edge glow
 const fragmentShader = `
   varying vec2 vUv;
   uniform float uTime;
@@ -36,22 +36,51 @@ const fragmentShader = `
   uniform float uEnergy;
   uniform vec2 uResolution;
 
+  // HSV to RGB conversion
+  vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+  }
+
   void main() {
-    // Calculate distance from edges (0 at edges, 1 at center)
     vec2 uv = vUv;
+    
+    // Calculate distance from edges (0 at edges, 1 at center)
     float edgeDistX = min(uv.x, 1.0 - uv.x) * 2.0;
     float edgeDistY = min(uv.y, 1.0 - uv.y) * 2.0;
     float edgeDist = min(edgeDistX, edgeDistY);
     
-    // Create smooth edge falloff
-    float glowWidth = 0.15; // How far glow extends from edge
-    float glow = 1.0 - smoothstep(0.0, glowWidth, edgeDist);
+    // Dynamic glow width based on energy (0.1 to 0.25)
+    float baseGlowWidth = 0.1;
+    float glowWidth = baseGlowWidth + uEnergy * 0.15;
     
-    // Static color (will be audio-reactive in Phase 6)
-    vec3 glowColor = vec3(0.4, 0.2, 0.8); // Purple glow
+    // Create smooth edge falloff with bass pulse
+    float bassPulse = 1.0 + uBass * 0.3; // Bass makes glow wider
+    float glow = 1.0 - smoothstep(0.0, glowWidth * bassPulse, edgeDist);
     
-    // Apply glow with transparency
-    float alpha = glow * 0.6; // Max 60% opacity at edges
+    // Audio-reactive color
+    // Bass = warm (red/orange), Mids = neutral (purple), Highs = cool (cyan/blue)
+    float hue = 0.75 - uBass * 0.25 + uHighs * 0.15; // Shift hue based on audio
+    hue = mod(hue + uTime * 0.02, 1.0); // Slow rotation over time
+    
+    float saturation = 0.7 + uMids * 0.3; // More saturated with mids
+    float brightness = 0.8 + uEnergy * 0.2; // Brighter with energy
+    
+    vec3 glowColor = hsv2rgb(vec3(hue, saturation, brightness));
+    
+    // Add subtle breathing animation
+    float breathe = sin(uTime * 2.0) * 0.1 + 0.9;
+    
+    // Intensity based on overall energy
+    float intensity = 0.4 + uEnergy * 0.4; // 40% to 80% intensity
+    
+    // Final alpha with breathing and audio
+    float alpha = glow * intensity * breathe;
+    
+    // Add slight inner glow on bass hits
+    float innerGlow = smoothstep(0.3, 0.0, edgeDist) * uBass * 0.15;
+    alpha += innerGlow;
     
     gl_FragColor = vec4(glowColor, alpha);
   }
