@@ -91,6 +91,16 @@ async function stopCapture(): Promise<{ success: boolean }> {
 
     isCapturing = false;
     capturedTabId = null;
+
+    // Broadcast stop to all tabs to hide the glow
+    chrome.tabs.query({}, (tabs) => {
+      for (const tab of tabs) {
+        if (tab.id && tab.url && !tab.url.startsWith("chrome://")) {
+          chrome.tabs.sendMessage(tab.id, { type: "STOP_VISUALIZER" }).catch(() => {});
+        }
+      }
+    });
+
     console.log("[PulseSynth] Audio capture stopped.");
 
     return { success: true };
