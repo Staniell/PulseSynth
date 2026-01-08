@@ -148,6 +148,11 @@ const fragmentShader = `
     float innerGlow = smoothstep(0.3, 0.0, edgeDist) * bassEffect * 0.2 * uIntensity;
     alpha += innerGlow;
     
+    // Silence threshold - completely clear visuals when no audio
+    float audioSum = uBass + uMids + uHighs + uEnergy;
+    float silence = 1.0 - step(audioSum, 0.02);
+    alpha *= silence;
+    
     alpha = clamp(alpha, 0.0, 0.9);
     
     gl_FragColor = vec4(glowColor, alpha);
